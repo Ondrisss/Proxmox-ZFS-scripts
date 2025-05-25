@@ -35,17 +35,11 @@ echo "Настройка репозиториев Proxmox..."
 echo "deb [arch=amd64] http://download.proxmox.com/debian/pve bookworm pve-no-subscription" > /etc/apt/sources.list.d/pve-install-repo.list
 
 # Импорт ключа
-date
-apt install chrony -y
-systemctl restart chrony
-timedatectl set-ntp true
-echo "Импорт ключа Proxmox..."
-{
-  wget --no-check-certificate https://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg || 
+wget --no-check-certificate https://download.proxmox.com/debian/proxmox-release-bookworm.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg || {
+  echo "Альтернативный метод загрузки ключа..."
   curl -k -o /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg https://download.proxmox.com/debian/proxmox-release-bookworm.gpg
-} || {
-  echo "Не удалось загрузить GPG ключ. Пробуем альтернативный метод..."
-  wget http://download.proxmox.com/debian/proxmox-ve-release-6.x.gpg -O /etc/apt/trusted.gpg.d/proxmox-release-bookworm.gpg
+}
+
 # Обновление пакетов
 echo "Обновление списка пакетов..."
 apt update
