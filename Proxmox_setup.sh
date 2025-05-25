@@ -44,6 +44,18 @@ wget --no-check-certificate https://download.proxmox.com/debian/proxmox-release-
 echo "Обновление списка пакетов..."
 apt update
 
+# Настройка хоста
+echo "Настройка имени хоста..."
+
+FQDN=`hostname -f`
+HOSTNAME=`hostname`
+HOST_IP=`ip a | grep global | awk '{print $2}' | cut -d/ -f1`
+
+sed -i "/$FQDN/d" /etc/hosts
+sed -i '/^\s*$/d' /etc/hosts
+echo "$HOST_IP $FQDN $HOSTNAME" >> /etc/hosts
+sort -u /etc/hosts -o /etc/hosts
+
 # Установка Proxmox VE
 echo "Установка Proxmox VE..."
 apt install -y proxmox-ve postfix open-iscsi chrony
@@ -51,11 +63,6 @@ apt install -y proxmox-ve postfix open-iscsi chrony
 # Отключение подписки enterprise
 echo "Отключение уведомления о подписке..."
 sed -i "s/data.status !== 'Active'/false/g" /usr/share/javascript/proxmox-widget-toolkit/proxmoxlib.js
-
-# Настройка хоста
-echo "Настройка имени хоста..."
-HOSTNAME=$(hostname)
-echo "127.0.0.1 $HOSTNAME" >> /etc/hosts
 
 # Перезагрузка
 echo "Установка завершена успешно."

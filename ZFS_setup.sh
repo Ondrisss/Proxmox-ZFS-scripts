@@ -14,63 +14,24 @@ if ! dpkg -l | grep -q proxmox-ve; then
   exit 1
 fi
 
-# Функция для обработки ошибок
-handle_error() {
-  echo "Ошибка в строке $1. Код выхода $2"
-  exit $2
-}
-
-trap 'handle_error $LINENO $?' ERR
-
-# Определение сетевого интерфейса
-PHYSICAL_INTERFACE=$(ip -o link show | awk '$2 !~ /lo|docker|veth|virbr|vmbr/ {print $2}' | cut -d":" -f1 | head -n 1)
-
-if [ -z "$PHYSICAL_INTERFACE" ]; then
-  echo "Не удалось определить физический интерфейс."
-  exit 1
-fi
-
-echo "Найден физический интерфейс: $PHYSICAL_INTERFACE"
-
-# Получение сетевых параметров
-HOST_IP=$(hostname -I | cut -d' ' -f1)
-HOST_NETMASK=$(ip addr show $PHYSICAL_INTERFACE | grep "inet" | awk '{print $2}' | cut -d'/' -f2)
-HOST_GATEWAY=$(ip route | grep default | awk '{print $3}')
-
-# Резервное копирование сетевых настроек
-echo "Создание резервной копии сетевых настроек..."
-cp /etc/network/interfaces /etc/network/interfaces.bak
-
-# Настройка моста
-echo "Настройка сетевого моста..."
-cat <<EOF > /etc/network/interfaces
-auto lo
-iface lo inet loopback
-
-auto $PHYSICAL_INTERFACE
-iface $PHYSICAL_INTERFACE inet manual
-
-auto vmbr0
-iface vmbr0 inet static
-  address $HOST_IP
-  netmask $HOST_NETMASK
-  gateway $HOST_GATEWAY
-  bridge_ports $PHYSICAL_INTERFACE
-  bridge_stp off
-  bridge_fd 0
-EOF
-
-# Перезапуск сети
-echo "Применение сетевых настроек..."
-systemctl restart networking
-
 # Установка ZFS
 echo "Установка ZFS..."
 apt install -y zfsutils-linux
 
-# Определение дисков для ZFS
-echo "Поиск доступных дисков..."
-DISKS=$(lsblk -d -o NAME,ROTA | grep -v NAME | awk '{print "/dev/"$1}')
+# Определение дисков для ZFS, исключая смонтированные и хотплаг
+DISKS=$(lsblk -dn -o NAME,HOTPLUG | while read name hotplug; do
+    dev="/dev/$name"
+
+    # Пропускаем хотплаг-устройства (USB, съёмные и т.д.)
+    [ "$hotplug" -eq 1 ] && continue
+
+    # Пропускаем, если есть смонтированные точки
+    mountpoint=$(lsblk -no MOUNTPOINT "$dev" | grep -v '^$')
+    [ -n "$mountpoint" ] && continue
+
+    echo "$dev"
+done)
+
 echo "Найдены диски:"
 echo "$DISKS"
 
@@ -114,7 +75,7 @@ if [[ "$create_pool" =~ ^[yY] ]]; then
   echo "Настройка ZFS для Proxmox..."
   zfs set compression=lz4 $pool_name
   zfs set atime=off $pool_name
-  
+  zfs set snapdir=visible $pool_name
   echo "ZFS pool создан:"
   zpool status
 fi
